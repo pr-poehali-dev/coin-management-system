@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +39,15 @@ type Settings = {
 
 const ADMIN_PASSWORD = '228228333';
 
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
 export default function Index() {
   const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -53,23 +62,39 @@ export default function Index() {
   const [editingCoin, setEditingCoin] = useState<Coin | null>(null);
   const [editCoinData, setEditCoinData] = useState({ value: '', change: '', volume: '' });
 
-  const [settings, setSettings] = useState<Settings>({
-    siteName: 'Мониторинг валют',
-    currencies: [
-      { code: 'USD', symbol: '$', rate: 1 },
-      { code: 'EUR', symbol: '€', rate: 0.92 },
-      { code: 'RUB', symbol: '₽', rate: 92 },
-    ],
-    activeCurrency: 'USD',
-  });
+  const [settings, setSettings] = useState<Settings>(() => 
+    loadFromStorage('coin-monitor-settings', {
+      siteName: 'Мониторинг валют',
+      currencies: [
+        { code: 'USD', symbol: '$', rate: 1 },
+        { code: 'EUR', symbol: '€', rate: 0.92 },
+        { code: 'RUB', symbol: '₽', rate: 92 },
+      ],
+      activeCurrency: 'USD',
+    })
+  );
 
-  const [coins, setCoins] = useState<Coin[]>([
-    { id: '1', name: 'Bitcoin', symbol: 'BTC', value: 67420, change: 2.5, volume: 28500000000 },
-    { id: '2', name: 'Ethereum', symbol: 'ETH', value: 3240, change: -1.2, volume: 15200000000 },
-    { id: '3', name: 'Solana', symbol: 'SOL', value: 145, change: 5.8, volume: 2400000000 },
-  ]);
+  const [coins, setCoins] = useState<Coin[]>(() =>
+    loadFromStorage('coin-monitor-coins', [
+      { id: '1', name: 'Bitcoin', symbol: 'BTC', value: 67420, change: 2.5, volume: 28500000000 },
+      { id: '2', name: 'Ethereum', symbol: 'ETH', value: 3240, change: -1.2, volume: 15200000000 },
+      { id: '3', name: 'Solana', symbol: 'SOL', value: 145, change: 5.8, volume: 2400000000 },
+    ])
+  );
 
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(() => loadFromStorage('coin-monitor-users', []));
+
+  useEffect(() => {
+    localStorage.setItem('coin-monitor-settings', JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem('coin-monitor-coins', JSON.stringify(coins));
+  }, [coins]);
+
+  useEffect(() => {
+    localStorage.setItem('coin-monitor-users', JSON.stringify(users));
+  }, [users]);
 
   const activeCurrencyData = settings.currencies.find(c => c.code === settings.activeCurrency) || settings.currencies[0];
 
