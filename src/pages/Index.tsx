@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import Icon from '@/components/ui/icon';
 import { useToast } from '@/hooks/use-toast';
 
@@ -33,12 +35,16 @@ export default function Index() {
   const [loginPassword, setLoginPassword] = useState('');
   const [addCoinDialogOpen, setAddCoinDialogOpen] = useState(false);
   const [newCoin, setNewCoin] = useState({ name: '', symbol: '', value: '', volume: '' });
+  const [addUserDialogOpen, setAddUserDialogOpen] = useState(false);
+  const [newUserData, setNewUserData] = useState({ username: '', role: 'Пользователь' as 'Админ' | 'Модер' | 'Пользователь' });
 
   const [coins, setCoins] = useState<Coin[]>([
     { id: '1', name: 'Bitcoin', symbol: 'BTC', value: 67420, change: 2.5, volume: 28500000000 },
     { id: '2', name: 'Ethereum', symbol: 'ETH', value: 3240, change: -1.2, volume: 15200000000 },
     { id: '3', name: 'Solana', symbol: 'SOL', value: 145, change: 5.8, volume: 2400000000 },
   ]);
+
+  const [users, setUsers] = useState<User[]>([]);
 
   const handleLogin = () => {
     if (!loginUsername || !loginPassword) {
@@ -59,12 +65,13 @@ export default function Index() {
         description: 'Вы вошли как администратор',
       });
     } else if (loginPassword === ADMIN_PASSWORD) {
-      const user: User = { username: loginUsername, role: 'Модер' };
+      const existingUser = users.find(u => u.username === loginUsername);
+      const user: User = existingUser || { username: loginUsername, role: 'Модер' };
       setCurrentUser(user);
       setIsAuthenticated(true);
       toast({
         title: 'Добро пожаловать!',
-        description: 'Вы вошли как модератор',
+        description: `Вы вошли как ${user.role.toLowerCase()}`,
       });
     } else {
       toast({
@@ -100,6 +107,64 @@ export default function Index() {
     toast({
       title: 'Успешно!',
       description: `Монета ${coin.name} добавлена`,
+    });
+  };
+
+  const handleDeleteCoin = (coinId: string) => {
+    const coin = coins.find(c => c.id === coinId);
+    setCoins(coins.filter(c => c.id !== coinId));
+    toast({
+      title: 'Монета удалена',
+      description: `${coin?.name} удалена из системы`,
+    });
+  };
+
+  const handleAddUser = () => {
+    if (!newUserData.username) {
+      toast({
+        title: 'Ошибка',
+        description: 'Введите имя пользователя',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (users.some(u => u.username === newUserData.username) || newUserData.username === currentUser?.username) {
+      toast({
+        title: 'Ошибка',
+        description: 'Пользователь уже существует',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const user: User = {
+      username: newUserData.username,
+      role: newUserData.role,
+    };
+
+    setUsers([...users, user]);
+    setNewUserData({ username: '', role: 'Пользователь' });
+    setAddUserDialogOpen(false);
+    toast({
+      title: 'Успешно!',
+      description: `Пользователь ${user.username} добавлен с ролью ${user.role}`,
+    });
+  };
+
+  const handleDeleteUser = (username: string) => {
+    setUsers(users.filter(u => u.username !== username));
+    toast({
+      title: 'Пользователь удалён',
+      description: `${username} удалён из системы`,
+    });
+  };
+
+  const handleChangeUserRole = (username: string, newRole: 'Админ' | 'Модер' | 'Пользователь') => {
+    setUsers(users.map(u => u.username === username ? { ...u, role: newRole } : u));
+    toast({
+      title: 'Роль изменена',
+      description: `${username} теперь ${newRole}`,
     });
   };
 
@@ -340,9 +405,27 @@ export default function Index() {
                       </div>
                     </div>
                     {canManageCoins && (
-                      <Button variant="outline" size="sm">
-                        <Icon name="Edit" size={16} />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                            <Icon name="Trash2" size={16} />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Удалить монету?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Вы уверены, что хотите удалить {coin.name}? Это действие нельзя отменить.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Отмена</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteCoin(coin.id)} className="bg-destructive hover:bg-destructive/90">
+                              Удалить
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     )}
                   </CardContent>
                 </Card>
@@ -351,25 +434,144 @@ export default function Index() {
           </TabsContent>
 
           <TabsContent value="users" className="space-y-6 animate-fade-in">
-            <h2 className="text-2xl font-bold">Авторизованные пользователи</h2>
-            <Card className="border-border/50">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Icon name="User" size={24} className="text-primary" />
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Управление пользователями</h2>
+              {canManageCoins && (
+                <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="gap-2">
+                      <Icon name="UserPlus" size={18} />
+                      Добавить пользователя
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Добавить пользователя</DialogTitle>
+                      <DialogDescription>Создайте нового пользователя и назначьте роль</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="user-name">Имя пользователя</Label>
+                        <Input
+                          id="user-name"
+                          placeholder="Введите имя"
+                          value={newUserData.username}
+                          onChange={(e) => setNewUserData({ ...newUserData, username: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="user-role">Роль</Label>
+                        <Select value={newUserData.role} onValueChange={(value: 'Админ' | 'Модер' | 'Пользователь') => setNewUserData({ ...newUserData, role: value })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Пользователь">Пользователь</SelectItem>
+                            <SelectItem value="Модер">Модер</SelectItem>
+                            <SelectItem value="Админ">Админ</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button onClick={handleAddUser} className="w-full">
+                        Добавить
+                      </Button>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold">{currentUser?.username}</h3>
-                      <p className="text-sm text-muted-foreground">Текущий пользователь</p>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <Card className="border-primary/50 bg-primary/5">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                        <Icon name="User" size={24} className="text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold">{currentUser?.username}</h3>
+                        <p className="text-sm text-muted-foreground">Вы (текущий пользователь)</p>
+                      </div>
                     </div>
+                    <Badge variant={currentUser?.role === 'Админ' ? 'default' : 'secondary'} className="text-sm px-4 py-1">
+                      {currentUser?.role}
+                    </Badge>
                   </div>
-                  <Badge variant={currentUser?.role === 'Админ' ? 'default' : 'secondary'} className="text-sm px-4 py-1">
-                    {currentUser?.role}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {users.map((user) => (
+                <Card key={user.username} className="border-border/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                          <Icon name="User" size={24} className="text-muted-foreground" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold">{user.username}</h3>
+                          <p className="text-sm text-muted-foreground">Зарегистрирован</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {canManageCoins ? (
+                          <Select value={user.role} onValueChange={(value: 'Админ' | 'Модер' | 'Пользователь') => handleChangeUserRole(user.username, value)}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Пользователь">Пользователь</SelectItem>
+                              <SelectItem value="Модер">Модер</SelectItem>
+                              <SelectItem value="Админ">Админ</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge variant={user.role === 'Админ' ? 'default' : 'secondary'} className="text-sm px-4 py-1">
+                            {user.role}
+                          </Badge>
+                        )}
+                        {canManageCoins && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                                <Icon name="Trash2" size={16} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Вы уверены, что хотите удалить {user.username}? Это действие нельзя отменить.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteUser(user.username)} className="bg-destructive hover:bg-destructive/90">
+                                  Удалить
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+
+              {users.length === 0 && (
+                <Card className="border-border/50">
+                  <CardContent className="p-12 text-center">
+                    <Icon name="Users" size={48} className="mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground">Пока нет других пользователей</p>
+                    {canManageCoins && (
+                      <p className="text-sm text-muted-foreground mt-2">Добавьте первого пользователя</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </main>
