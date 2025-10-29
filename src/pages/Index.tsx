@@ -718,43 +718,45 @@ export default function Index() {
                           Добавить пользователя
                         </Button>
                       </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Добавить пользователя</DialogTitle>
-                      <DialogDescription>Создайте нового пользователя и назначьте роль</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="user-name">Имя пользователя</Label>
-                        <Input
-                          id="user-name"
-                          placeholder="Введите имя"
-                          value={newUserData.username}
-                          onChange={(e) => setNewUserData({ ...newUserData, username: e.target.value })}
-                        />
-                      </div>
-                      {isAdmin && (
-                        <div className="space-y-2">
-                          <Label htmlFor="user-role">Роль</Label>
-                          <Select value={newUserData.role} onValueChange={(value: 'Админ' | 'Модер' | 'Пользователь') => setNewUserData({ ...newUserData, role: value })}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Пользователь">Пользователь</SelectItem>
-                              <SelectItem value="Модер">Модер</SelectItem>
-                              <SelectItem value="Админ">Админ</SelectItem>
-                            </SelectContent>
-                          </Select>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Добавить пользователя</DialogTitle>
+                          <DialogDescription>Создайте нового пользователя и назначьте роль</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="user-name">Имя пользователя</Label>
+                            <Input
+                              id="user-name"
+                              placeholder="Введите имя"
+                              value={newUserData.username}
+                              onChange={(e) => setNewUserData({ ...newUserData, username: e.target.value })}
+                            />
+                          </div>
+                          {isAdmin && (
+                            <div className="space-y-2">
+                              <Label htmlFor="user-role">Роль</Label>
+                              <Select value={newUserData.role} onValueChange={(value: 'Админ' | 'Модер' | 'Пользователь') => setNewUserData({ ...newUserData, role: value })}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Пользователь">Пользователь</SelectItem>
+                                  <SelectItem value="Модер">Модер</SelectItem>
+                                  <SelectItem value="Админ">Админ</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          <Button onClick={handleAddUser} className="w-full">
+                            Добавить
+                          </Button>
                         </div>
-                      )}
-                      <Button onClick={handleAddUser} className="w-full">
-                        Добавить
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              )}
+                      </DialogContent>
+                    </Dialog>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">
