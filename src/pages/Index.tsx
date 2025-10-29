@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 type User = {
   username: string;
   role: 'Админ' | 'Модер' | 'Пользователь';
+  balance: number;
 };
 
 type Coin = {
@@ -50,8 +51,8 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
 
 export default function Index() {
   const { toast } = useToast();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => loadFromStorage('coin-monitor-auth', false));
+  const [currentUser, setCurrentUser] = useState<User | null>(() => loadFromStorage('coin-monitor-current-user', null));
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [addCoinDialogOpen, setAddCoinDialogOpen] = useState(false);
@@ -61,6 +62,9 @@ export default function Index() {
   const [editCoinDialogOpen, setEditCoinDialogOpen] = useState(false);
   const [editingCoin, setEditingCoin] = useState<Coin | null>(null);
   const [editCoinData, setEditCoinData] = useState({ value: '', change: '', volume: '' });
+  const [giveBalanceDialogOpen, setGiveBalanceDialogOpen] = useState(false);
+  const [selectedUserForBalance, setSelectedUserForBalance] = useState<User | null>(null);
+  const [balanceAmount, setBalanceAmount] = useState('');
 
   const [settings, setSettings] = useState<Settings>(() => 
     loadFromStorage('coin-monitor-settings', {
@@ -96,6 +100,14 @@ export default function Index() {
     localStorage.setItem('coin-monitor-users', JSON.stringify(users));
   }, [users]);
 
+  useEffect(() => {
+    localStorage.setItem('coin-monitor-auth', JSON.stringify(isAuthenticated));
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    localStorage.setItem('coin-monitor-current-user', JSON.stringify(currentUser));
+  }, [currentUser]);
+
   const activeCurrencyData = settings.currencies.find(c => c.code === settings.activeCurrency) || settings.currencies[0];
 
   const convertPrice = (usdPrice: number) => {
@@ -113,7 +125,11 @@ export default function Index() {
     }
 
     if (loginUsername === 'Sabzara' && loginPassword === ADMIN_PASSWORD) {
-      const user: User = { username: 'Sabzara', role: 'Админ' };
+      const existingAdmin = users.find(u => u.username === 'Sabzara');
+      const user: User = existingAdmin || { username: 'Sabzara', role: 'Админ', balance: 0 };
+      if (!existingAdmin) {
+        setUsers([...users, user]);
+      }
       setCurrentUser(user);
       setIsAuthenticated(true);
       toast({
@@ -204,6 +220,7 @@ export default function Index() {
     const user: User = {
       username: newUserData.username,
       role: newUserData.role,
+      balance: 0,
     };
 
     setUsers([...users, user]);
@@ -224,7 +241,13 @@ export default function Index() {
   };
 
   const handleChangeUserRole = (username: string, newRole: 'Админ' | 'Модер' | 'Пользователь') => {
-    setUsers(users.map(u => u.username === username ? { ...u, role: newRole } : u));
+    const updatedUsers = users.map(u => u.username === username ? { ...u, role: newRole } : u);
+    setUsers(updatedUsers);
+    
+    if (currentUser?.username === username) {
+      setCurrentUser({ ...currentUser, role: newRole });
+    }
+    
     toast({
       title: 'Роль изменена',
       description: `${username} теперь ${newRole}`,
@@ -294,6 +317,55 @@ export default function Index() {
     });
   };
 
+  const handleGiveBalance = () => {
+    if (!selectedUserForBalance || !balanceAmount) {
+      toast({
+        title: 'Ошибка',
+        description: 'Выберите пользователя и укажите сумму',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const amount = parseFloat(balanceAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: 'Ошибка',
+        description: 'Укажите корректную сумму',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setUsers(users.map(u => 
+      u.username === selectedUserForBalance.username 
+        ? { ...u, balance: u.balance + amount }
+        : u
+    ));
+
+    if (currentUser?.username === selectedUserForBalance.username) {
+      setCurrentUser({ ...currentUser, balance: currentUser.balance + amount });
+    }
+
+    toast({
+      title: 'Успешно!',
+      description: `${amount} ${activeCurrencyData.symbol} выдано пользователю ${selectedUserForBalance.username}`,
+    });
+
+    setGiveBalanceDialogOpen(false);
+    setSelectedUserForBalance(null);
+    setBalanceAmount('');
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    toast({
+      title: 'До свидания!',
+      description: 'Вы вышли из системы',
+    });
+  };
+
   const canManageCoins = currentUser?.role === 'Админ' || currentUser?.role === 'Модер';
   const isAdmin = currentUser?.role === 'Админ';
 
@@ -350,23 +422,26 @@ export default function Index() {
             <h1 className="text-2xl font-bold">{settings.siteName}</h1>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Icon name="User" size={18} className="text-muted-foreground" />
-              <span className="font-medium">{currentUser?.username}</span>
-              <Badge variant={currentUser?.role === 'Админ' ? 'default' : 'secondary'}>
-                {currentUser?.role}
-              </Badge>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 px-4 py-2 bg-primary/10 rounded-lg">
+                <Icon name="Wallet" size={20} className="text-primary" />
+                <span className="font-bold text-lg">{convertPrice(currentUser?.balance || 0).toFixed(2)} {activeCurrencyData.symbol}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Icon name="User" size={18} className="text-muted-foreground" />
+                <span className="font-medium">{currentUser?.username}</span>
+                <Badge variant={currentUser?.role === 'Админ' ? 'default' : 'secondary'}>
+                  {currentUser?.role}
+                </Badge>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+              >
+                <Icon name="LogOut" size={16} />
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setIsAuthenticated(false);
-                setCurrentUser(null);
-              }}
-            >
-              <Icon name="LogOut" size={16} />
-            </Button>
           </div>
         </div>
       </header>
@@ -432,6 +507,11 @@ export default function Index() {
                         <div>
                           <h3 className="text-xl font-bold">{coin.name}</h3>
                           <p className="text-muted-foreground">{coin.symbol}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-16 h-16 flex items-center justify-center ${coin.change > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          <Icon name={coin.change > 0 ? 'TrendingUp' : 'TrendingDown'} size={48} strokeWidth={2.5} />
                         </div>
                       </div>
                       <div className="text-right">
@@ -574,14 +654,70 @@ export default function Index() {
           <TabsContent value="users" className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Управление пользователями</h2>
-              {canManageCoins && (
-                <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="gap-2">
-                      <Icon name="UserPlus" size={18} />
-                      Добавить пользователя
-                    </Button>
-                  </DialogTrigger>
+              <div className="flex gap-3">
+                {canManageCoins && (
+                  <>
+                    <Dialog open={giveBalanceDialogOpen} onOpenChange={setGiveBalanceDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="gap-2">
+                          <Icon name="Wallet" size={18} />
+                          Выдать валюту
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Выдать валюту пользователю</DialogTitle>
+                          <DialogDescription>Выберите пользователя и укажите сумму</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-4">
+                          <div className="space-y-2">
+                            <Label>Пользователь</Label>
+                            <Select 
+                              value={selectedUserForBalance?.username || ''} 
+                              onValueChange={(username) => {
+                                const user = [...users, currentUser].find(u => u?.username === username);
+                                setSelectedUserForBalance(user || null);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Выберите пользователя" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {currentUser && (
+                                  <SelectItem value={currentUser.username}>{currentUser.username} (Вы)</SelectItem>
+                                )}
+                                {users.map((user) => (
+                                  <SelectItem key={user.username} value={user.username}>
+                                    {user.username}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="balance-amount">Сумма ({activeCurrencyData.symbol})</Label>
+                            <Input
+                              id="balance-amount"
+                              type="number"
+                              step="0.01"
+                              placeholder="100"
+                              value={balanceAmount}
+                              onChange={(e) => setBalanceAmount(e.target.value)}
+                            />
+                          </div>
+                          <Button onClick={handleGiveBalance} className="w-full">
+                            Выдать
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="gap-2">
+                          <Icon name="UserPlus" size={18} />
+                          Добавить пользователя
+                        </Button>
+                      </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Добавить пользователя</DialogTitle>
@@ -634,9 +770,15 @@ export default function Index() {
                         <p className="text-sm text-muted-foreground">Вы (текущий пользователь)</p>
                       </div>
                     </div>
-                    <Badge variant={currentUser?.role === 'Админ' ? 'default' : 'secondary'} className="text-sm px-4 py-1">
-                      {currentUser?.role}
-                    </Badge>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">Баланс</p>
+                        <p className="text-lg font-bold">{convertPrice(currentUser?.balance || 0).toFixed(2)} {activeCurrencyData.symbol}</p>
+                      </div>
+                      <Badge variant={currentUser?.role === 'Админ' ? 'default' : 'secondary'} className="text-sm px-4 py-1">
+                        {currentUser?.role}
+                      </Badge>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -651,7 +793,7 @@ export default function Index() {
                         </div>
                         <div>
                           <h3 className="text-lg font-bold">{user.username}</h3>
-                          <p className="text-sm text-muted-foreground">Зарегистрирован</p>
+                          <p className="text-sm text-muted-foreground">Баланс: {convertPrice(user.balance || 0).toFixed(2)} {activeCurrencyData.symbol}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -758,7 +900,7 @@ export default function Index() {
                   </div>
 
                   <div className="border-t pt-4 space-y-3">
-                    <Label>Список валют</Label>
+                    <Label>Список валют (доступно для Админа и Модера)</Label>
                     {settings.currencies.map((currency) => (
                       <div key={currency.code} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex items-center gap-3">
@@ -770,7 +912,7 @@ export default function Index() {
                             <p className="text-sm text-muted-foreground">Курс: {currency.rate}</p>
                           </div>
                         </div>
-                        {settings.currencies.length > 1 && (
+                        {settings.currencies.length > 1 && canManageCoins && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
