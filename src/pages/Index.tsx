@@ -18,7 +18,7 @@ export default function Index() {
   const [addCoinDialogOpen, setAddCoinDialogOpen] = useState(false);
   const [newCoin, setNewCoin] = useState({ name: '', symbol: '', value: '', volume: '' });
   const [addUserDialogOpen, setAddUserDialogOpen] = useState(false);
-  const [newUserData, setNewUserData] = useState({ username: '', role: 'Пользователь' as 'Админ' | 'Модер' | 'Пользователь' });
+  const [newUserData, setNewUserData] = useState({ username: '', password: '', role: 'Пользователь' as 'Админ' | 'Модер' | 'Пользователь' });
   const [editCoinDialogOpen, setEditCoinDialogOpen] = useState(false);
   const [editingCoin, setEditingCoin] = useState<Coin | null>(null);
   const [editCoinData, setEditCoinData] = useState({ value: '', change: '', volume: '' });
@@ -46,7 +46,13 @@ export default function Index() {
     ])
   );
 
-  const [users, setUsers] = useState<User[]>(() => loadFromStorage('coin-monitor-users', []));
+  const [users, setUsers] = useState<User[]>(() => {
+    const loadedUsers = loadFromStorage<User[]>('coin-monitor-users', []);
+    return loadedUsers.map(user => ({
+      ...user,
+      password: user.password || 'default123'
+    }));
+  });
 
   useEffect(() => {
     localStorage.setItem('coin-monitor-settings', JSON.stringify(settings));
@@ -112,10 +118,19 @@ export default function Index() {
   };
 
   const handleAddUser = () => {
-    if (!newUserData.username) {
+    if (!newUserData.username || !newUserData.password) {
       toast({
         title: 'Ошибка',
-        description: 'Введите имя пользователя',
+        description: 'Введите имя пользователя и пароль',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newUserData.password.length < 4) {
+      toast({
+        title: 'Ошибка',
+        description: 'Пароль должен быть не менее 4 символов',
         variant: 'destructive',
       });
       return;
@@ -132,12 +147,13 @@ export default function Index() {
 
     const user: User = {
       username: newUserData.username,
+      password: newUserData.password,
       role: newUserData.role,
       balance: 0,
     };
 
     setUsers([...users, user]);
-    setNewUserData({ username: '', role: 'Пользователь' });
+    setNewUserData({ username: '', password: '', role: 'Пользователь' });
     setAddUserDialogOpen(false);
     toast({
       title: 'Успешно!',

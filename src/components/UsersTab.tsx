@@ -20,8 +20,8 @@ type UsersTabProps = {
   handleDeleteUser: (username: string) => void;
   handleChangeUserRole: (username: string, newRole: 'Админ' | 'Модер' | 'Пользователь') => void;
   handleGiveBalance: () => void;
-  newUserData: { username: string; role: 'Админ' | 'Модер' | 'Пользователь' };
-  setNewUserData: (data: { username: string; role: 'Админ' | 'Модер' | 'Пользователь' }) => void;
+  newUserData: { username: string; password: string; role: 'Админ' | 'Модер' | 'Пользователь' };
+  setNewUserData: (data: { username: string; password: string; role: 'Админ' | 'Модер' | 'Пользователь' }) => void;
   addUserDialogOpen: boolean;
   setAddUserDialogOpen: (open: boolean) => void;
   giveBalanceDialogOpen: boolean;
@@ -135,6 +135,16 @@ export default function UsersTab({
                         placeholder="Введите имя"
                         value={newUserData.username}
                         onChange={(e) => setNewUserData({ ...newUserData, username: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="user-password">Пароль</Label>
+                      <Input
+                        id="user-password"
+                        type="password"
+                        placeholder="Минимум 4 символа"
+                        value={newUserData.password}
+                        onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
                       />
                     </div>
                     {isAdmin && (

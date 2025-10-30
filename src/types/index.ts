@@ -1,5 +1,6 @@
 export type User = {
   username: string;
+  password: string;
   role: 'Админ' | 'Модер' | 'Пользователь';
   balance: number;
 };
