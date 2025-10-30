@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Icon from '@/components/ui/icon';
 import { useToast } from '@/hooks/use-toast';
 import { User, Coin, Settings, loadFromStorage } from '@/types';
+import { api } from '@/lib/api';
 import LoginForm from '@/components/LoginForm';
 import AppHeader from '@/components/AppHeader';
 import MonitoringTab from '@/components/MonitoringTab';
@@ -25,46 +26,58 @@ export default function Index() {
   const [giveBalanceDialogOpen, setGiveBalanceDialogOpen] = useState(false);
   const [selectedUserForBalance, setSelectedUserForBalance] = useState<User | null>(null);
   const [balanceAmount, setBalanceAmount] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [settings, setSettings] = useState<Settings>(() => 
-    loadFromStorage('coin-monitor-settings', {
-      siteName: 'Мониторинг валют',
-      currencies: [
-        { code: 'USD', symbol: '$', rate: 1 },
-        { code: 'EUR', symbol: '€', rate: 0.92 },
-        { code: 'RUB', symbol: '₽', rate: 92 },
-      ],
-      activeCurrency: 'USD',
-    })
-  );
-
-  const [coins, setCoins] = useState<Coin[]>(() =>
-    loadFromStorage('coin-monitor-coins', [
-      { id: '1', name: 'Bitcoin', symbol: 'BTC', value: 67420, change: 2.5, volume: 28500000000 },
-      { id: '2', name: 'Ethereum', symbol: 'ETH', value: 3240, change: -1.2, volume: 15200000000 },
-      { id: '3', name: 'Solana', symbol: 'SOL', value: 145, change: 5.8, volume: 2400000000 },
-    ])
-  );
-
-  const [users, setUsers] = useState<User[]>(() => {
-    const loadedUsers = loadFromStorage<User[]>('coin-monitor-users', []);
-    return loadedUsers.map(user => ({
-      ...user,
-      password: user.password || 'default123'
-    }));
+  const [settings, setSettings] = useState<Settings>({
+    siteName: 'Мониторинг валют',
+    currencies: [],
+    activeCurrency: 'USD',
   });
 
-  useEffect(() => {
-    localStorage.setItem('coin-monitor-settings', JSON.stringify(settings));
-  }, [settings]);
+  const [coins, setCoins] = useState<Coin[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+
+  const loadData = async () => {
+    try {
+      const data = await api.getAllData();
+      
+      const formattedCoins = data.coins.map((coin: any) => ({
+        id: coin.id,
+        name: coin.name,
+        symbol: coin.symbol,
+        value: parseFloat(coin.value),
+        change: parseFloat(coin.change),
+        volume: coin.volume
+      }));
+      
+      const formattedCurrencies = data.currencies.map((curr: any) => ({
+        id: curr.id,
+        code: curr.code,
+        symbol: curr.symbol,
+        rate: parseFloat(curr.rate)
+      }));
+      
+      setCoins(formattedCoins);
+      setUsers(data.users);
+      setSettings({
+        siteName: data.settings?.site_name || 'Мониторинг валют',
+        currencies: formattedCurrencies,
+        activeCurrency: data.settings?.active_currency || 'USD'
+      });
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem('coin-monitor-coins', JSON.stringify(coins));
-  }, [coins]);
-
-  useEffect(() => {
-    localStorage.setItem('coin-monitor-users', JSON.stringify(users));
-  }, [users]);
+    if (isAuthenticated) {
+      loadData();
+      const interval = setInterval(loadData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     localStorage.setItem('coin-monitor-auth', JSON.stringify(isAuthenticated));
@@ -74,13 +87,13 @@ export default function Index() {
     localStorage.setItem('coin-monitor-current-user', JSON.stringify(currentUser));
   }, [currentUser]);
 
-  const activeCurrencyData = settings.currencies.find(c => c.code === settings.activeCurrency) || settings.currencies[0];
+  const activeCurrencyData = settings.currencies.find(c => c.code === settings.activeCurrency) || settings.currencies[0] || { code: 'USD', symbol: '$', rate: 1 };
 
   const convertPrice = (usdPrice: number) => {
-    return usdPrice * activeCurrencyData.rate;
+    return usdPrice * (typeof activeCurrencyData.rate === 'number' ? activeCurrencyData.rate : parseFloat(String(activeCurrencyData.rate)));
   };
 
-  const handleAddCoin = () => {
+  const handleAddCoin = async () => {
     if (!newCoin.name || !newCoin.symbol || !newCoin.value || !newCoin.volume) {
       toast({
         title: 'Ошибка',
@@ -90,34 +103,43 @@ export default function Index() {
       return;
     }
 
-    const coin: Coin = {
-      id: Date.now().toString(),
-      name: newCoin.name,
-      symbol: newCoin.symbol.toUpperCase(),
-      value: parseFloat(newCoin.value),
-      change: 0,
-      volume: parseFloat(newCoin.volume),
-    };
-
-    setCoins([...coins, coin]);
-    setNewCoin({ name: '', symbol: '', value: '', volume: '' });
-    setAddCoinDialogOpen(false);
-    toast({
-      title: 'Успешно!',
-      description: `Монета ${coin.name} добавлена`,
-    });
+    try {
+      await api.addCoin(newCoin.name, newCoin.symbol.toUpperCase(), newCoin.value, '0', newCoin.volume);
+      await loadData();
+      setNewCoin({ name: '', symbol: '', value: '', volume: '' });
+      setAddCoinDialogOpen(false);
+      toast({
+        title: 'Успешно!',
+        description: `Монета ${newCoin.name} добавлена`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось добавить монету',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDeleteCoin = (coinId: string) => {
-    const coin = coins.find(c => c.id === coinId);
-    setCoins(coins.filter(c => c.id !== coinId));
-    toast({
-      title: 'Монета удалена',
-      description: `${coin?.name} удалена из системы`,
-    });
+  const handleDeleteCoin = async (coinId: string | number) => {
+    const coin = coins.find(c => c.id == coinId);
+    try {
+      await api.deleteCoin(Number(coinId));
+      await loadData();
+      toast({
+        title: 'Монета удалена',
+        description: `${coin?.name} удалена из системы`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось удалить монету',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!newUserData.username || !newUserData.password) {
       toast({
         title: 'Ошибка',
@@ -136,51 +158,67 @@ export default function Index() {
       return;
     }
 
-    if (users.some(u => u.username === newUserData.username) || newUserData.username === currentUser?.username) {
+    try {
+      await api.addUser(newUserData.username, newUserData.password, newUserData.role, 0);
+      await loadData();
+      setNewUserData({ username: '', password: '', role: 'Пользователь' });
+      setAddUserDialogOpen(false);
+      toast({
+        title: 'Успешно!',
+        description: `Пользователь ${newUserData.username} добавлен`,
+      });
+    } catch (error) {
       toast({
         title: 'Ошибка',
         description: 'Пользователь уже существует',
         variant: 'destructive',
       });
-      return;
     }
-
-    const user: User = {
-      username: newUserData.username,
-      password: newUserData.password,
-      role: newUserData.role,
-      balance: 0,
-    };
-
-    setUsers([...users, user]);
-    setNewUserData({ username: '', password: '', role: 'Пользователь' });
-    setAddUserDialogOpen(false);
-    toast({
-      title: 'Успешно!',
-      description: `Пользователь ${user.username} добавлен с ролью ${user.role}`,
-    });
   };
 
-  const handleDeleteUser = (username: string) => {
-    setUsers(users.filter(u => u.username !== username));
-    toast({
-      title: 'Пользователь удалён',
-      description: `${username} удалён из системы`,
-    });
+  const handleDeleteUser = async (username: string) => {
+    const user = users.find(u => u.username === username);
+    if (user && user.id) {
+      try {
+        await api.deleteUser(user.id);
+        await loadData();
+        toast({
+          title: 'Пользователь удалён',
+          description: `${username} удалён из системы`,
+        });
+      } catch (error) {
+        toast({
+          title: 'Ошибка',
+          description: 'Не удалось удалить пользователя',
+          variant: 'destructive',
+        });
+      }
+    }
   };
 
-  const handleChangeUserRole = (username: string, newRole: 'Админ' | 'Модер' | 'Пользователь') => {
-    const updatedUsers = users.map(u => u.username === username ? { ...u, role: newRole } : u);
-    setUsers(updatedUsers);
-    
-    if (currentUser?.username === username) {
-      setCurrentUser({ ...currentUser, role: newRole });
+  const handleChangeUserRole = async (username: string, newRole: 'Админ' | 'Модер' | 'Пользователь') => {
+    const user = users.find(u => u.username === username);
+    if (user && user.id) {
+      try {
+        await api.updateUserRole(user.id, newRole);
+        await loadData();
+        
+        if (currentUser?.username === username) {
+          setCurrentUser({ ...currentUser, role: newRole });
+        }
+        
+        toast({
+          title: 'Роль изменена',
+          description: `${username} теперь ${newRole}`,
+        });
+      } catch (error) {
+        toast({
+          title: 'Ошибка',
+          description: 'Не удалось изменить роль',
+          variant: 'destructive',
+        });
+      }
     }
-    
-    toast({
-      title: 'Роль изменена',
-      description: `${username} теперь ${newRole}`,
-    });
   };
 
   const handleEditCoin = (coin: Coin) => {
@@ -193,7 +231,7 @@ export default function Index() {
     setEditCoinDialogOpen(true);
   };
 
-  const handleSaveEditCoin = () => {
+  const handleSaveEditCoin = async () => {
     if (!editingCoin || !editCoinData.value || !editCoinData.volume) {
       toast({
         title: 'Ошибка',
@@ -203,30 +241,43 @@ export default function Index() {
       return;
     }
 
-    setCoins(coins.map(c => 
-      c.id === editingCoin.id 
-        ? { ...c, value: parseFloat(editCoinData.value), change: parseFloat(editCoinData.change || '0'), volume: parseFloat(editCoinData.volume) }
-        : c
-    ));
-    setEditCoinDialogOpen(false);
-    setEditingCoin(null);
-    toast({
-      title: 'Успешно!',
-      description: `Данные монеты ${editingCoin.name} обновлены`,
-    });
+    try {
+      await api.updateCoin(Number(editingCoin.id), editCoinData.value, editCoinData.change || '0', editCoinData.volume);
+      await loadData();
+      setEditCoinDialogOpen(false);
+      setEditingCoin(null);
+      toast({
+        title: 'Успешно!',
+        description: `Данные монеты ${editingCoin.name} обновлены`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось обновить данные',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleAddCurrency = (code: string, symbol: string, rate: string) => {
+  const handleAddCurrency = async (code: string, symbol: string, rate: string) => {
     if (!code || !symbol || !rate) return;
-    const newCurrency = { code: code.toUpperCase(), symbol, rate: parseFloat(rate) };
-    setSettings({ ...settings, currencies: [...settings.currencies, newCurrency] });
-    toast({
-      title: 'Валюта добавлена',
-      description: `${code} успешно добавлена`,
-    });
+    try {
+      await api.addCurrency(code.toUpperCase(), symbol, rate);
+      await loadData();
+      toast({
+        title: 'Валюта добавлена',
+        description: `${code} успешно добавлена`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось добавить валюту',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDeleteCurrency = (code: string) => {
+  const handleDeleteCurrency = async (code: string) => {
     if (settings.currencies.length <= 1) {
       toast({
         title: 'Ошибка',
@@ -235,18 +286,27 @@ export default function Index() {
       });
       return;
     }
-    setSettings({ 
-      ...settings, 
-      currencies: settings.currencies.filter(c => c.code !== code),
-      activeCurrency: settings.activeCurrency === code ? settings.currencies[0].code : settings.activeCurrency
-    });
-    toast({
-      title: 'Валюта удалена',
-      description: `${code} удалена из системы`,
-    });
+    
+    const currency = settings.currencies.find(c => c.code === code);
+    if (currency && currency.id) {
+      try {
+        await api.deleteCurrency(currency.id);
+        await loadData();
+        toast({
+          title: 'Валюта удалена',
+          description: `${code} удалена из системы`,
+        });
+      } catch (error) {
+        toast({
+          title: 'Ошибка',
+          description: 'Не удалось удалить валюту',
+          variant: 'destructive',
+        });
+      }
+    }
   };
 
-  const handleGiveBalance = () => {
+  const handleGiveBalance = async () => {
     if (!selectedUserForBalance || !balanceAmount) {
       toast({
         title: 'Ошибка',
@@ -257,55 +317,64 @@ export default function Index() {
     }
 
     const amount = parseFloat(balanceAmount);
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount)) {
       toast({
         title: 'Ошибка',
-        description: 'Укажите корректную сумму',
+        description: 'Некорректная сумма',
         variant: 'destructive',
       });
       return;
     }
 
-    setUsers(users.map(u => 
-      u.username === selectedUserForBalance.username 
-        ? { ...u, balance: u.balance + amount }
-        : u
-    ));
-
-    if (currentUser?.username === selectedUserForBalance.username) {
-      setCurrentUser({ ...currentUser, balance: currentUser.balance + amount });
+    if (selectedUserForBalance.id) {
+      try {
+        await api.updateBalance(selectedUserForBalance.id, amount);
+        await loadData();
+        
+        if (currentUser?.id === selectedUserForBalance.id) {
+          const updatedUser = users.find(u => u.id === selectedUserForBalance.id);
+          if (updatedUser) {
+            setCurrentUser(updatedUser);
+          }
+        }
+        
+        setGiveBalanceDialogOpen(false);
+        setBalanceAmount('');
+        setSelectedUserForBalance(null);
+        toast({
+          title: 'Баланс обновлён',
+          description: `${selectedUserForBalance.username} получил ${amount} ${activeCurrencyData.symbol}`,
+        });
+      } catch (error) {
+        toast({
+          title: 'Ошибка',
+          description: 'Не удалось обновить баланс',
+          variant: 'destructive',
+        });
+      }
     }
-
-    toast({
-      title: 'Успешно!',
-      description: `${amount} ${activeCurrencyData.symbol} выдано пользователю ${selectedUserForBalance.username}`,
-    });
-
-    setGiveBalanceDialogOpen(false);
-    setSelectedUserForBalance(null);
-    setBalanceAmount('');
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
-    toast({
-      title: 'До свидания!',
-      description: 'Вы вышли из системы',
-    });
   };
 
-  const canManageCoins = currentUser?.role === 'Админ' || currentUser?.role === 'Модер';
   const isAdmin = currentUser?.role === 'Админ';
+  const canManageCoins = currentUser?.role === 'Админ' || currentUser?.role === 'Модер';
 
   if (!isAuthenticated) {
+    return <LoginForm users={users} setUsers={setUsers} setCurrentUser={setCurrentUser} setIsAuthenticated={setIsAuthenticated} />;
+  }
+
+  if (loading) {
     return (
-      <LoginForm 
-        users={users}
-        setUsers={setUsers}
-        setCurrentUser={setCurrentUser}
-        setIsAuthenticated={setIsAuthenticated}
-      />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Icon name="Loader2" size={48} className="animate-spin mx-auto mb-4" />
+          <p className="text-lg">Загрузка данных...</p>
+        </div>
+      </div>
     );
   }
 
@@ -314,29 +383,27 @@ export default function Index() {
       <AppHeader 
         siteName={settings.siteName}
         currentUser={currentUser}
-        activeCurrencyData={activeCurrencyData}
-        convertPrice={convertPrice}
         handleLogout={handleLogout}
       />
-
+      
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="monitoring" className="space-y-6">
-          <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-4 h-12">
-            <TabsTrigger value="monitoring" className="text-base">
-              <Icon name="BarChart3" size={18} className="mr-2" />
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+            <TabsTrigger value="monitoring" className="gap-2">
+              <Icon name="TrendingUp" size={18} />
               Мониторинг
             </TabsTrigger>
-            <TabsTrigger value="coins" className="text-base">
-              <Icon name="Coins" size={18} className="mr-2" />
+            <TabsTrigger value="coins" className="gap-2">
+              <Icon name="Coins" size={18} />
               Монеты
             </TabsTrigger>
-            <TabsTrigger value="users" className="text-base">
-              <Icon name="Users" size={18} className="mr-2" />
+            <TabsTrigger value="users" className="gap-2">
+              <Icon name="Users" size={18} />
               Пользователи
             </TabsTrigger>
             {isAdmin && (
-              <TabsTrigger value="settings" className="text-base">
-                <Icon name="Settings" size={18} className="mr-2" />
+              <TabsTrigger value="settings" className="gap-2">
+                <Icon name="Settings" size={18} />
                 Настройки
               </TabsTrigger>
             )}
@@ -395,7 +462,10 @@ export default function Index() {
             <TabsContent value="settings">
               <SettingsTab 
                 settings={settings}
-                setSettings={setSettings}
+                setSettings={async (newSettings: Settings) => {
+                  await api.updateSettings(newSettings.siteName, newSettings.activeCurrency);
+                  setSettings(newSettings);
+                }}
                 handleAddCurrency={handleAddCurrency}
                 handleDeleteCurrency={handleDeleteCurrency}
                 canManageCoins={canManageCoins}

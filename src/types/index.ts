@@ -1,4 +1,5 @@
 export type User = {
+  id?: number;
   username: string;
   password: string;
   role: 'Админ' | 'Модер' | 'Пользователь';
@@ -6,7 +7,7 @@ export type User = {
 };
 
 export type Coin = {
-  id: string;
+  id: number | string;
   name: string;
   symbol: string;
   value: number;
@@ -15,9 +16,10 @@ export type Coin = {
 };
 
 export type Currency = {
+  id?: number;
   code: string;
   symbol: string;
-  rate: number;
+  rate: number | string;
 };
 
 export type Settings = {

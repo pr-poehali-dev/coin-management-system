@@ -1,0 +1,31 @@
+{
+  "tests": [
+    {
+      "name": "Get all data",
+      "method": "GET",
+      "path": "/?path=all",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "users": [],
+        "currencies": [],
+        "coins": [],
+        "settings": {}
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Login user",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "login",
+        "data": {
+          "username": "Sabzara",
+          "password": "228228333"
+        }
+      },
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

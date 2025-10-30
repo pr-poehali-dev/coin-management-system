@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Icon from '@/components/ui/icon';
 import { User, ADMIN_PASSWORD } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
 
 type LoginFormProps = {
   users: User[];
@@ -23,7 +24,7 @@ export default function LoginForm({ users, setUsers, setCurrentUser, setIsAuthen
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState('');
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!loginUsername || !loginPassword) {
       toast({
         title: 'Ошибка',
@@ -34,25 +35,34 @@ export default function LoginForm({ users, setUsers, setCurrentUser, setIsAuthen
     }
 
     if (loginUsername === 'Sabzara' && loginPassword === ADMIN_PASSWORD) {
-      const existingAdmin = users.find(u => u.username === 'Sabzara');
-      const user: User = existingAdmin || { username: 'Sabzara', role: 'Админ', balance: 0, password: ADMIN_PASSWORD };
-      if (!existingAdmin) {
-        setUsers([...users, user]);
-      }
-      setCurrentUser(user);
-      setIsAuthenticated(true);
-      toast({
-        title: 'Добро пожаловать!',
-        description: 'Вы вошли как администратор',
-      });
-    } else {
-      const existingUser = users.find(u => u.username === loginUsername);
-      if (existingUser && existingUser.password === loginPassword) {
-        setCurrentUser(existingUser);
+      const result = await api.login(loginUsername, loginPassword);
+      if (!result.success) {
+        await api.addUser('Sabzara', ADMIN_PASSWORD, 'Админ', 0);
+        const loginResult = await api.login(loginUsername, loginPassword);
+        if (loginResult.success) {
+          setCurrentUser(loginResult.user);
+          setIsAuthenticated(true);
+          toast({
+            title: 'Добро пожаловать!',
+            description: 'Вы вошли как администратор',
+          });
+        }
+      } else {
+        setCurrentUser(result.user);
         setIsAuthenticated(true);
         toast({
           title: 'Добро пожаловать!',
-          description: `Вы вошли как ${existingUser.role.toLowerCase()}`,
+          description: 'Вы вошли как администратор',
+        });
+      }
+    } else {
+      const result = await api.login(loginUsername, loginPassword);
+      if (result.success) {
+        setCurrentUser(result.user);
+        setIsAuthenticated(true);
+        toast({
+          title: 'Добро пожаловать!',
+          description: `Вы вошли как ${result.user.role.toLowerCase()}`,
         });
       } else {
         toast({
@@ -64,7 +74,7 @@ export default function LoginForm({ users, setUsers, setCurrentUser, setIsAuthen
     }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!registerUsername || !registerPassword || !registerPasswordConfirm) {
       toast({
         title: 'Ошибка',
@@ -92,29 +102,29 @@ export default function LoginForm({ users, setUsers, setCurrentUser, setIsAuthen
       return;
     }
 
-    if (users.find(u => u.username === registerUsername)) {
+    try {
+      const result = await api.register(registerUsername, registerPassword);
+      if (result.success) {
+        setCurrentUser(result.user);
+        setIsAuthenticated(true);
+        toast({
+          title: 'Регистрация успешна!',
+          description: 'Добро пожаловать в систему',
+        });
+      } else {
+        toast({
+          title: 'Ошибка',
+          description: 'Пользователь с таким именем уже существует',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
       toast({
         title: 'Ошибка',
-        description: 'Пользователь с таким именем уже существует',
+        description: 'Пользователь уже существует',
         variant: 'destructive',
       });
-      return;
     }
-
-    const newUser: User = {
-      username: registerUsername,
-      password: registerPassword,
-      role: 'Пользователь',
-      balance: 0,
-    };
-
-    setUsers([...users, newUser]);
-    setCurrentUser(newUser);
-    setIsAuthenticated(true);
-    toast({
-      title: 'Регистрация успешна!',
-      description: 'Добро пожаловать в систему',
-    });
   };
 
   return (
